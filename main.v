@@ -12,11 +12,36 @@ const (
 
 struct Tile {
 	id int
+	points int
 	picname string
+}
+
+const (
+	all_tiles = [
+		Tile{0, 0, '1.png'}
+		Tile{1, 2, '2.png'}
+		Tile{2, 4, '4.png'}
+		Tile{3, 8, '8.png'}
+		Tile{4, 16, '16.png'}
+		Tile{5, 32, '32.png'}
+		Tile{6, 64, '64.png'}
+		Tile{7, 128, '128.png'}
+		Tile{8, 256, '256.png'}
+		Tile{9, 512, '512.png'}
+		Tile{10, 1024, '1024.png'}
+		Tile{11, 2048, '2048.png'}
+		Tile{12, 4096, '4096.png'}
+		Tile{13, 8196, '8196.png'}
+		]
+)
+struct TileImage {
+	tile Tile
 mut:	
 	image gg.Image
 }
-fn (t &Tile) str() string { return 'Tile{ id: $t.id, picname: $t.picname }' }
+// TODO: remove the .str() method here. It is just to prevent C compilation errors
+// about sg_image_str
+fn (t &TileImage) str() string { return 'TileImage{ Tile{id: $t.tile.id, points: $t.tile.points, picname: $t.tile.picname } }' }
 //
 struct Board {
 mut:
@@ -45,28 +70,58 @@ fn (b Board) hmirror() Board {
 struct TileLine {
 	ypos int
 mut:
-	field [6]int
+	field [5]int
 	points int
 }
+fn no_newlines(s string) string { return s.replace('\n',' ') }
+//
 fn (t TileLine) to_left() TileLine {
-	right_border_idx := 6-1
+	right_border_idx := 5
 	mut res := t
-	for x := 0; x<right_border_idx; x++ {
-		if t.field[x] == 0 {
-			for k := x; k < right_border_idx; k++ {
-				res.field[k] = t.field[k+1]
-			}
-			continue
+	mut shifts := 0
+	mut zeros := 0
+	mut nonzeros := 0
+	// gather meta info about the line:
+	for x := 0; x < 4; x++ {
+		if res.field[x] == 0 {
+			zeros++
+		} else {
+			nonzeros++
 		}
-		if t.field[x] == t.field[x+1] {
-			res.points += t.field[x]
-			res.field[x] = t.field[x]+1
-			for k := x; k < right_border_idx; k++ {
-				res.field[k] = t.field[k+1]
+	}
+	if nonzeros == 0 {
+		// when all the tiles are empty, there is nothing left to do
+		return res
+	}
+	if zeros > 0 {
+		// we have some 0s, do shifts to compact them:
+		mut remaining_zeros := zeros
+		for x := 0; x < right_border_idx-1; x++ {
+			for res.field[x] == 0 && remaining_zeros > 0 {
+				for k := x; k < right_border_idx; k++ {
+					res.field[k] = res.field[k+1]
+				}
+				shifts++
+				remaining_zeros--
 			}
 		}
 	}
-	eprintln('TileLine.to_left:\n$t\n$res\n-----------------------------------')
+	// At this point, the non 0 tiles are all on the left, with no empty spaces
+	// between them. we can safely merge them, when they have the same value:
+	for x := 0; x < right_border_idx-1; x++ {
+		if res.field[x] == 0 {
+			break
+		}
+		if res.field[x] == res.field[x+1] {
+			for k := x; k < right_border_idx; k++ {
+				res.field[k] = res.field[k+1]
+			}
+			shifts++
+			res.field[x]++
+			res.points += all_tiles[ res.field[x] ].points
+		}
+	}	
+	eprintln('TileLine.to_left shifts: $shifts | zeros: $zeros | nonzeros: $nonzeros\n${no_newlines(t.str())}\n${no_newlines(res.str())}\n-----------------------------------')
 	return res
 }
 
@@ -75,7 +130,7 @@ fn (b Board) to_left() Board {
 	for y := 0; y < 4; y++ {
 		mut hline := TileLine{y}
 		for x := 0; x < 4; x++ {
-			hline.field[1+x] = b.field[y][x]
+			hline.field[x] = b.field[y][x]
 		}
 		reshline := hline.to_left()
 		res.points += reshline.points
@@ -95,36 +150,23 @@ enum GameState {
 struct App {
 mut:
     gg &gg.Context
-	tiles []Tile
+	tiles []TileImage
 	//
 	board Board
 	atickers [4][4]int
 	state GameState = .play
 }
 
-fn (mut app App) new_tile(id int, picname string) Tile {
-	mut tile := Tile{id, picname}
-	tile.image = app.gg.create_image(os.resource_abs_path(os.join_path('assets', picname)))
-	return tile
+fn (mut app App) new_tile(t Tile) TileImage {
+	mut timage := TileImage{tile: t}
+	timage.image = app.gg.create_image(os.resource_abs_path(os.join_path('assets', t.picname)))
+	return timage
 }
 
 fn (mut app App) load_tiles() {
-	app.tiles = [
-		app.new_tile(0, '1.png')
-		app.new_tile(1, '2.png')
-		app.new_tile(2, '4.png')
-		app.new_tile(3, '8.png')
-		app.new_tile(4, '16.png')
-		app.new_tile(5, '32.png')
-		app.new_tile(6, '64.png')
-		app.new_tile(7, '128.png')
-		app.new_tile(8, '256.png')
-		app.new_tile(9, '512.png')
-		app.new_tile(10, '1024.png')
-		app.new_tile(11, '2048.png')
-		app.new_tile(12, '4096.png')
-		app.new_tile(13, '8196.png')
-		]
+	for t in all_tiles {
+		app.tiles << app.new_tile(t)
+	}
 	eprintln('tiles: $app.tiles')
 }
 
@@ -191,6 +233,7 @@ fn (mut app App) new_random_tile() {
 		random_value := 1 + rand.intn(2)
 		app.board.field[ empty_pos.y ][ empty_pos.x ] = random_value
 		app.atickers[ empty_pos.y ][ empty_pos.x ] = 30
+		eprintln('>>>>> new_random_tile, app.board.points: $app.board.points | random_value: $random_value at ${no_newlines(empty_pos.str())}')
 	} else {
 		app.game_over()
 	}
@@ -210,25 +253,27 @@ fn (mut app App) on_key_down(key sapp.KeyCode) {
 			exit(0)
 		}
 		.up, .w {
-			app.move(-1,0)
-			app.board = app.board.transpose().hmirror().to_left().hmirror().transpose()
+			app.board = app.board.transpose().to_left().transpose()
+			app.new_random_tile()
 		}
 		.left, .a {
-			app.move(0,-1)
 			app.board = app.board.to_left()
+			app.new_random_tile()
 		}
 		.down, .s {
-			app.move(1,0)
-			app.board = app.board.transpose().to_left().transpose()
+			app.board = app.board.transpose().hmirror().to_left().hmirror().transpose()
+			app.new_random_tile()
 		}
 		.right, .d {
-			app.move(0,1)
 			app.board = app.board.hmirror().to_left().hmirror()
+			app.new_random_tile()
+		}
+		.space {
+			app.new_random_tile()
 		}
 		else {}
 	}
 	eprintln('app.board.points: $app.board.points')
-	app.new_random_tile()
 }
 
 //
