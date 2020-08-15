@@ -4,19 +4,62 @@ import os
 import rand
 import sokol.sapp
 
-const (
-	window_title = 'v2048'
-    window_width = 562
-    window_height = 562
-)
-
 struct Tile {
 	id int
 	points int
 	picname string
 }
 
+struct Pos {
+	x int = -1
+	y int = -1
+}
+struct TextLabel {
+	text string
+	pos Pos
+	cfg gx.TextCfg
+}
+
+struct ImageLabel {
+	pos Pos
+	dim Pos
+}
+
 const (
+	window_title = 'v2048'
+    window_width = 562
+    window_height = 562
+	points_label = TextLabel{
+		text: 'Points: '
+		pos: Pos{10,5},
+		cfg: gx.TextCfg{
+			align: gx.align_left
+			size: 24
+			color: gx.rgb(0, 0, 0)
+		}
+	}
+	moves_label = TextLabel{
+		text: 'Moves: '
+		pos: Pos{window_width-160,5},
+		cfg: gx.TextCfg{
+			align: gx.align_left
+			size: 24
+			color: gx.rgb(0, 0, 0)
+		}
+	}
+	game_over_label = TextLabel{
+		text: 'Game Over'
+		pos: Pos{ 80, 220 }
+		cfg: gx.TextCfg{
+			align: gx.align_left
+			size: 100
+			color: gx.rgb(0, 0, 255)
+		}
+	}
+	victory_image_label = ImageLabel{
+		pos: Pos{ 80, 220 }
+		dim: Pos{ 430, 130 }
+	}
 	all_tiles = [
 		Tile{0, 0, '1.png'}
 		Tile{1, 2, '2.png'}
@@ -47,6 +90,7 @@ struct Board {
 mut:
 	field [4][4]int
 	points int
+	shifts int
 }
 fn (b Board) transpose() Board {
 	mut res := b
@@ -72,13 +116,13 @@ struct TileLine {
 mut:
 	field [5]int
 	points int
+	shifts int
 }
 fn no_newlines(s string) string { return s.replace('\n',' ') }
 //
 fn (t TileLine) to_left() TileLine {
 	right_border_idx := 5
 	mut res := t
-	mut shifts := 0
 	mut zeros := 0
 	mut nonzeros := 0
 	// gather meta info about the line:
@@ -98,10 +142,10 @@ fn (t TileLine) to_left() TileLine {
 		mut remaining_zeros := zeros
 		for x := 0; x < right_border_idx-1; x++ {
 			for res.field[x] == 0 && remaining_zeros > 0 {
+				res.shifts++
 				for k := x; k < right_border_idx; k++ {
 					res.field[k] = res.field[k+1]
 				}
-				shifts++
 				remaining_zeros--
 			}
 		}
@@ -116,12 +160,12 @@ fn (t TileLine) to_left() TileLine {
 			for k := x; k < right_border_idx; k++ {
 				res.field[k] = res.field[k+1]
 			}
-			shifts++
+			res.shifts++
 			res.field[x]++
 			res.points += all_tiles[ res.field[x] ].points
 		}
 	}	
-	eprintln('TileLine.to_left shifts: $shifts | zeros: $zeros | nonzeros: $nonzeros\n${no_newlines(t.str())}\n${no_newlines(res.str())}\n-----------------------------------')
+	//eprintln('TileLine.to_left shifts: $res.shifts | zeros: $zeros | nonzeros: $nonzeros\n${no_newlines(t.str())}\n${no_newlines(res.str())}\n-----------------------------------')
 	return res
 }
 
@@ -133,6 +177,7 @@ fn (b Board) to_left() Board {
 			hline.field[x] = b.field[y][x]
 		}
 		reshline := hline.to_left()
+		res.shifts += reshline.shifts
 		res.points += reshline.points
 		for x := 0; x < 4; x++ {
 			res.field[y][x] = reshline.field[x]
@@ -144,17 +189,20 @@ fn (b Board) to_left() Board {
 //
 enum GameState {
 	play
-	win
 	over
+	victory
 }
 struct App {
 mut:
     gg &gg.Context
 	tiles []TileImage
+	victory_image gg.Image
 	//
 	board Board
+	undo []Board
 	atickers [4][4]int
 	state GameState = .play
+	moves int
 }
 
 fn (mut app App) new_tile(t Tile) TileImage {
@@ -167,7 +215,7 @@ fn (mut app App) load_tiles() {
 	for t in all_tiles {
 		app.tiles << app.new_tile(t)
 	}
-	eprintln('tiles: $app.tiles')
+	//eprintln('tiles: $app.tiles')
 }
 
 fn (mut app App) update_tickers() {
@@ -184,12 +232,20 @@ fn (mut app App) update_tickers() {
 
 fn (app &App) draw() {
 	app.draw_tiles()
+	app.gg.draw_text(points_label.pos.x, points_label.pos.y, '$points_label.text ${app.board.points:08}', points_label.cfg)
+	app.gg.draw_text(moves_label.pos.x, moves_label.pos.y, '$moves_label.text ${app.moves:5d}', moves_label.cfg)
+	if app.state == .over {
+		app.gg.draw_text(game_over_label.pos.x, game_over_label.pos.y, game_over_label.text, game_over_label.cfg)
+	}
+	if app.state == .victory {
+		app.gg.draw_image(victory_image_label.pos.x, victory_image_label.pos.y, victory_image_label.dim.x, victory_image_label.dim.y, app.victory_image)
+	}
 }
 
 fn (app &App) draw_tiles() {
 	border := 10
 	xstart := 10
-	ystart := 10
+	ystart := 30
 	tsize := 128
 	for y := 0; y < 4; y++ {
 		for x := 0; x < 4; x++ {
@@ -202,78 +258,139 @@ fn (app &App) draw_tiles() {
 	}
 }
 
-fn (mut app App) clear_field() {
+fn (mut app App) new_game() {
+	app.board = Board{}
 	for y := 0; y < 4; y++ {
 		for x := 0; x < 4; x++ {
 			app.board.field[y][x] = 0
 			app.atickers[y][x] = 0
 		}
 	}
+	app.state = .play
+	app.undo = []
+	app.moves = 0
+	app.new_random_tile()
+	app.new_random_tile()
 }
 
-struct Pos {
-	x int = -1
-	y int = -1
+fn (mut app App) check_for_victory() {
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			fidx := app.board.field[y][x]
+			if fidx == 11 {
+				app.victory()
+				return
+			}
+		}
+	}
 }
-fn (mut app App) new_random_tile() {
-	mut etiles := [16]Pos
-	mut etiles_max := 0
+
+fn (mut app App) check_for_game_over() {
+	mut zeros := 0
+	mut remaining_merges := 0
 	for y := 0; y < 4; y++ {
 		for x := 0; x < 4; x++ {
 			fidx := app.board.field[y][x]
 			if fidx == 0 {
-				etiles[etiles_max] = Pos{x,y}
-				etiles_max++
+				zeros++
+				continue
+			}
+			if x > 0 && fidx == app.board.field[y][x-1] {
+				remaining_merges++
+			}
+			if x < 4-1 && fidx == app.board.field[y][x+1] {
+				remaining_merges++
+			}
+			if y > 0 && fidx == app.board.field[y-1][x] {
+				remaining_merges++
+			}
+			if y < 4-1 && fidx == app.board.field[y+1][x] {
+				remaining_merges++
 			}
 		}
 	}
-	if etiles_max > 0 {
-		new_random_tile_index := rand.intn(etiles_max)
-		empty_pos := etiles[new_random_tile_index]
-		random_value := 1 + rand.intn(2)
-		app.board.field[ empty_pos.y ][ empty_pos.x ] = random_value
-		app.atickers[ empty_pos.y ][ empty_pos.x ] = 30
-		eprintln('>>>>> new_random_tile, app.board.points: $app.board.points | random_value: $random_value at ${no_newlines(empty_pos.str())}')
-	} else {
+	if remaining_merges == 0 && zeros == 0 {
 		app.game_over()
 	}
 }
 
+fn (mut app App) new_random_tile() {
+	mut etiles := [16]Pos
+	mut empty_tiles_max := 0
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			fidx := app.board.field[y][x]
+			if fidx == 0 {
+				etiles[empty_tiles_max] = Pos{x,y}
+				empty_tiles_max++
+			}
+		}
+	}
+	if empty_tiles_max > 0 {
+		new_random_tile_index := rand.intn(empty_tiles_max)
+		empty_pos := etiles[new_random_tile_index]
+		random_value := 1 + rand.intn(2)
+		app.board.field[ empty_pos.y ][ empty_pos.x ] = random_value
+		app.atickers[ empty_pos.y ][ empty_pos.x ] = 30
+		//eprintln('>>>>> new_random_tile, app.board.points: $app.board.points | random_value: $random_value at ${no_newlines(empty_pos.str())}')
+	}
+	app.check_for_victory()
+	app.check_for_game_over()
+}
+
+fn (mut app App) victory() {
+	app.state = .victory
+}
+
 fn (mut app App) game_over() {
-	app.state = .over 
+	app.state = .over
 }
 
-fn (mut app App) move(dx int, dy int) {
-	eprintln('move: $dx $dy')
+fn (mut app App) move(move_fn fn(b Board) Board) {
+	old := app.board
+	new := move_fn(old)
+	if old.shifts != new.shifts {
+		app.moves++
+		app.board = new
+		app.undo << old
+		app.new_random_tile()
+	}
+	
 }
-
 fn (mut app App) on_key_down(key sapp.KeyCode) {
+	// these keys are independent from the game state:
 	match key {
-		.escape {
-			exit(0)
-		}
-		.up, .w {
-			app.board = app.board.transpose().to_left().transpose()
-			app.new_random_tile()
-		}
-		.left, .a {
-			app.board = app.board.to_left()
-			app.new_random_tile()
-		}
-		.down, .s {
-			app.board = app.board.transpose().hmirror().to_left().hmirror().transpose()
-			app.new_random_tile()
-		}
-		.right, .d {
-			app.board = app.board.hmirror().to_left().hmirror()
-			app.new_random_tile()
-		}
-		.space {
-			app.new_random_tile()
+		.escape { exit(0) }
+		.space { app.new_random_tile() }
+		.n { app.new_game() }
+		.backspace {
+			if app.undo.len > 0 { 
+				app.state = .play
+				app.board = app.undo.pop()
+				app.moves--
+				return
+			}
 		}
 		else {}
+	}	
+	if app.state == .play {
+		match key {
+			.up, .w {
+				app.move(fn(b Board) Board { return b.transpose().to_left().transpose() })
+			}
+			.left, .a {
+				app.move(fn(b Board) Board { return b.to_left() })
+			}
+			.down, .s {
+				app.move(fn(b Board) Board { return b.transpose().hmirror().to_left().hmirror().transpose() })
+			}
+			.right, .d {
+				app.move(fn(b Board) Board { return b.hmirror().to_left().hmirror() })
+			}
+			else {}
+		}
 	}
-	eprintln('app.board.points: $app.board.points')
+	//eprintln('app.board.points: $app.board.points')
 }
 
 //
@@ -292,10 +409,8 @@ fn frame(mut app App) {
 }
 
 fn main() {
-    mut app := &App{gg:0}
-	app.clear_field()
-	app.new_random_tile()
-	app.new_random_tile()
+    mut app := &App{gg:0, state: .play}
+	app.new_game()
     app.gg = gg.new_context(
         bg_color: gx.white
         width: window_width
@@ -306,7 +421,9 @@ fn main() {
         frame_fn: frame
 		event_fn: on_event
         user_data: app
+		font_path: os.resource_abs_path(os.join_path('assets', 'RobotoMono-Regular.ttf'))
     )
 	app.load_tiles()
+	app.victory_image = app.gg.create_image(os.resource_abs_path(os.join_path('assets', 'victory.png')))
     app.gg.run()
 }
