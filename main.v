@@ -27,10 +27,10 @@ struct ImageLabel {
 }
 
 const (
-	window_title        = 'v2048'
-	window_width        = 562
-	window_height       = 562
-	points_label        = TextLabel{
+	window_title  = 'v2048'
+	window_width  = 562
+	window_height = 562
+	points_label  = TextLabel{
 		text: 'Points: '
 		pos: Pos{10, 5}
 		cfg: gx.TextCfg{
@@ -39,7 +39,7 @@ const (
 			color: gx.rgb(0, 0, 0)
 		}
 	}
-	moves_label         = TextLabel{
+	moves_label = TextLabel{
 		text: 'Moves: '
 		pos: Pos{window_width - 160, 5}
 		cfg: gx.TextCfg{
@@ -48,7 +48,7 @@ const (
 			color: gx.rgb(0, 0, 0)
 		}
 	}
-	game_over_label     = TextLabel{
+	game_over_label = TextLabel{
 		text: 'Game Over'
 		pos: Pos{80, 220}
 		cfg: gx.TextCfg{
@@ -61,7 +61,7 @@ const (
 		pos: Pos{80, 220}
 		dim: Pos{430, 130}
 	}
-	all_tiles           = [
+	all_tiles = [
 		Tile{0, 0, '1.png'},
 		Tile{1, 2, '2.png'},
 		Tile{2, 4, '4.png'},
@@ -80,7 +80,7 @@ const (
 )
 
 struct TileImage {
-	tile  Tile
+	tile Tile
 mut:
 	image gg.Image
 }
@@ -120,7 +120,7 @@ fn (b Board) hmirror() Board {
 }
 
 struct TileLine {
-	ypos   int
+	ypos int
 mut:
 	field  [5]int
 	points int
@@ -184,7 +184,9 @@ fn (t TileLine) to_left() TileLine {
 fn (b Board) to_left() Board {
 	mut res := b
 	for y := 0; y < 4; y++ {
-		mut hline := TileLine{ypos:y}
+		mut hline := TileLine{
+			ypos: y
+		}
 		for x := 0; x < 4; x++ {
 			hline.field[x] = b.field[y][x]
 		}
@@ -211,11 +213,11 @@ mut:
 	tiles         []TileImage
 	victory_image gg.Image
 	//
-	board         Board
-	undo          []Board
-	atickers      [4][4]int
-	state         GameState = .play
-	moves         int
+	board    Board
+	undo     []Board
+	atickers [4][4]int
+	state    GameState = .play
+	moves    int
 }
 
 fn (mut app App) new_tile(t Tile) TileImage {
@@ -273,8 +275,7 @@ fn (app &App) draw_tiles() {
 			tw := tsize - 10 * app.atickers[y][x]
 			th := tsize - 10 * app.atickers[y][x]
 			app.gg.draw_image(xstart + x * (tsize + border) + (tsize - tw) / 2, ystart +
-				y * (tsize + border) + (tsize - th) /
-				2, tw, th, tile.image)
+				y * (tsize + border) + (tsize - th) / 2, tw, th, tile.image)
 		}
 	}
 }
@@ -348,9 +349,9 @@ fn (mut app App) new_random_tile() {
 		}
 	}
 	if empty_tiles_max > 0 {
-		new_random_tile_index := rand.intn(empty_tiles_max) or {0}
+		new_random_tile_index := rand.intn(empty_tiles_max) or { 0 }
 		empty_pos := etiles[new_random_tile_index]
-		random_value := 1 + rand.intn(2) or {0}
+		random_value := 1 + rand.intn(2) or { 0 }
 		app.board.field[empty_pos.y][empty_pos.x] = random_value
 		app.atickers[empty_pos.y][empty_pos.x] = 30
 		// eprintln('>>>>> new_random_tile, app.board.points: $app.board.points | random_value: $random_value at ${no_newlines(empty_pos.str())}')
@@ -367,7 +368,8 @@ fn (mut app App) game_over() {
 	app.state = .over
 }
 
-type BoardMoveFN = fn(b Board) Board
+type BoardMoveFN = fn (b Board) Board
+
 fn (mut app App) move(move_fn BoardMoveFN) {
 	old := app.board
 	new := move_fn(old)
@@ -403,18 +405,26 @@ fn (mut app App) on_key_down(key sapp.KeyCode) {
 	}
 	if app.state == .play {
 		match key {
-			.up, .w { app.move(fn (b Board) Board {
+			.up, .w {
+				app.move(fn (b Board) Board {
 					return b.transpose().to_left().transpose()
-				}) }
-			.left, .a { app.move(fn (b Board) Board {
+				})
+			}
+			.left, .a {
+				app.move(fn (b Board) Board {
 					return b.to_left()
-				}) }
-			.down, .s { app.move(fn (b Board) Board {
+				})
+			}
+			.down, .s {
+				app.move(fn (b Board) Board {
 					return b.transpose().hmirror().to_left().hmirror().transpose()
-				}) }
-			.right, .d { app.move(fn (b Board) Board {
+				})
+			}
+			.right, .d {
+				app.move(fn (b Board) Board {
 					return b.hmirror().to_left().hmirror()
-				}) }
+				})
+			}
 			else {}
 		}
 	}
