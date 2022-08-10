@@ -184,7 +184,7 @@ fn (t TileLine) to_left() TileLine {
 fn (b Board) to_left() Board {
 	mut res := b
 	for y := 0; y < 4; y++ {
-		mut hline := TileLine{y}
+		mut hline := TileLine{ypos:y}
 		for x := 0; x < 4; x++ {
 			hline.field[x] = b.field[y][x]
 		}
@@ -336,7 +336,7 @@ fn (mut app App) check_for_game_over() {
 }
 
 fn (mut app App) new_random_tile() {
-	mut etiles := [16]Pos
+	mut etiles := [16]Pos{}
 	mut empty_tiles_max := 0
 	for y := 0; y < 4; y++ {
 		for x := 0; x < 4; x++ {
@@ -348,9 +348,9 @@ fn (mut app App) new_random_tile() {
 		}
 	}
 	if empty_tiles_max > 0 {
-		new_random_tile_index := rand.intn(empty_tiles_max)
+		new_random_tile_index := rand.intn(empty_tiles_max) or {0}
 		empty_pos := etiles[new_random_tile_index]
-		random_value := 1 + rand.intn(2)
+		random_value := 1 + rand.intn(2) or {0}
 		app.board.field[empty_pos.y][empty_pos.x] = random_value
 		app.atickers[empty_pos.y][empty_pos.x] = 30
 		// eprintln('>>>>> new_random_tile, app.board.points: $app.board.points | random_value: $random_value at ${no_newlines(empty_pos.str())}')
@@ -367,7 +367,7 @@ fn (mut app App) game_over() {
 	app.state = .over
 }
 
-type BoardMoveFN fn(b Board) Board
+type BoardMoveFN = fn(b Board) Board
 fn (mut app App) move(move_fn BoardMoveFN) {
 	old := app.board
 	new := move_fn(old)
@@ -423,7 +423,7 @@ fn (mut app App) on_key_down(key sapp.KeyCode) {
 
 //
 fn on_event(e &sapp.Event, mut app App) {
-	if e.typ == .key_down {
+	if e.@type == .key_down {
 		app.on_key_down(e.key_code)
 	}
 }
@@ -441,7 +441,7 @@ fn main() {
 		state: .play
 	}
 	app.new_game()
-	app.gg = gg.new_context({
+	app.gg = gg.new_context(
 		bg_color: gx.white
 		width: window_width
 		height: window_height
@@ -452,7 +452,7 @@ fn main() {
 		event_fn: on_event
 		user_data: app
 		font_path: os.resource_abs_path(os.join_path('assets', 'RobotoMono-Regular.ttf'))
-	})
+	)
 	app.load_tiles()
 	app.victory_image = app.gg.create_image(os.resource_abs_path(os.join_path('assets',
 		'victory.png')))
