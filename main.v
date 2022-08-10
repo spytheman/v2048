@@ -155,7 +155,7 @@ fn (t TileLine) to_left() TileLine {
 		for x := 0; x < right_border_idx - 1; x++ {
 			for res.field[x] == 0 && remaining_zeros > 0 {
 				res.shifts++
-				for k := x; k < right_border_idx; k++ {
+				for k := x; k < right_border_idx - 1; k++ {
 					res.field[k] = res.field[k + 1]
 				}
 				remaining_zeros--
@@ -169,7 +169,7 @@ fn (t TileLine) to_left() TileLine {
 			break
 		}
 		if res.field[x] == res.field[x + 1] {
-			for k := x; k < right_border_idx; k++ {
+			for k := x; k < right_border_idx - 1; k++ {
 				res.field[k] = res.field[k + 1]
 			}
 			res.shifts++
