@@ -2,7 +2,6 @@ import gg
 import gx
 import os
 import rand
-import sokol.sapp
 
 struct Tile {
 	id      int
@@ -26,58 +25,56 @@ struct ImageLabel {
 	dim Pos
 }
 
-const (
-	window_title  = 'v2048'
-	window_width  = 562
-	window_height = 562
-	points_label  = TextLabel{
-		text: 'Points: '
-		pos: Pos{10, 5}
-		cfg: gx.TextCfg{
-			align: gx.align_left
-			size: 24
-			color: gx.rgb(0, 0, 0)
-		}
+const window_title = 'v2048'
+const window_width = 562
+const window_height = 562
+const points_label = TextLabel{
+	text: 'Points: '
+	pos: Pos{10, 5}
+	cfg: gx.TextCfg{
+		align: gx.align_left
+		size: 24
+		color: gx.rgb(0, 0, 0)
 	}
-	moves_label = TextLabel{
-		text: 'Moves: '
-		pos: Pos{window_width - 160, 5}
-		cfg: gx.TextCfg{
-			align: gx.align_left
-			size: 24
-			color: gx.rgb(0, 0, 0)
-		}
+}
+const moves_label = TextLabel{
+	text: 'Moves: '
+	pos: Pos{window_width - 160, 5}
+	cfg: gx.TextCfg{
+		align: gx.align_left
+		size: 24
+		color: gx.rgb(0, 0, 0)
 	}
-	game_over_label = TextLabel{
-		text: 'Game Over'
-		pos: Pos{80, 220}
-		cfg: gx.TextCfg{
-			align: gx.align_left
-			size: 100
-			color: gx.rgb(0, 0, 255)
-		}
+}
+const game_over_label = TextLabel{
+	text: 'Game Over'
+	pos: Pos{80, 220}
+	cfg: gx.TextCfg{
+		align: gx.align_left
+		size: 100
+		color: gx.rgb(0, 0, 255)
 	}
-	victory_image_label = ImageLabel{
-		pos: Pos{80, 220}
-		dim: Pos{430, 130}
-	}
-	all_tiles = [
-		Tile{0, 0, '1.png'},
-		Tile{1, 2, '2.png'},
-		Tile{2, 4, '4.png'},
-		Tile{3, 8, '8.png'},
-		Tile{4, 16, '16.png'},
-		Tile{5, 32, '32.png'},
-		Tile{6, 64, '64.png'},
-		Tile{7, 128, '128.png'},
-		Tile{8, 256, '256.png'},
-		Tile{9, 512, '512.png'},
-		Tile{10, 1024, '1024.png'},
-		Tile{11, 2048, '2048.png'},
-		Tile{12, 4096, '4096.png'},
-		Tile{13, 8196, '8196.png'},
-	]
-)
+}
+const victory_image_label = ImageLabel{
+	pos: Pos{80, 220}
+	dim: Pos{430, 130}
+}
+const all_tiles = [
+	Tile{0, 0, '1.png'},
+	Tile{1, 2, '2.png'},
+	Tile{2, 4, '4.png'},
+	Tile{3, 8, '8.png'},
+	Tile{4, 16, '16.png'},
+	Tile{5, 32, '32.png'},
+	Tile{6, 64, '64.png'},
+	Tile{7, 128, '128.png'},
+	Tile{8, 256, '256.png'},
+	Tile{9, 512, '512.png'},
+	Tile{10, 1024, '1024.png'},
+	Tile{11, 2048, '2048.png'},
+	Tile{12, 4096, '4096.png'},
+	Tile{13, 8196, '8196.png'},
+]
 
 struct TileImage {
 	tile Tile
@@ -88,7 +85,7 @@ mut:
 // TODO: remove the .str() method here. It is just to prevent C compilation errors
 // about sg_image_str
 fn (t &TileImage) str() string {
-	return 'TileImage{ Tile{id: $t.tile.id, points: $t.tile.points, picname: $t.tile.picname } }'
+	return 'TileImage{ Tile{id: ${t.tile.id}, points: ${t.tile.points}, picname: ${t.tile.picname} } }'
 }
 
 //
@@ -209,7 +206,7 @@ enum GameState {
 
 struct App {
 mut:
-	gg            &gg.Context
+	gg            &gg.Context = unsafe { nil }
 	tiles         []TileImage
 	victory_image gg.Image
 	//
@@ -224,7 +221,9 @@ fn (mut app App) new_tile(t Tile) TileImage {
 	mut timage := TileImage{
 		tile: t
 	}
-	timage.image = app.gg.create_image(os.resource_abs_path(os.join_path('assets', t.picname)))
+	timage.image = app.gg.create_image(os.resource_abs_path(os.join_path('assets', t.picname))) or {
+		panic(err)
+	}
 	return timage
 }
 
@@ -249,9 +248,9 @@ fn (mut app App) update_tickers() {
 
 fn (app &App) draw() {
 	app.draw_tiles()
-	app.gg.draw_text(points_label.pos.x, points_label.pos.y, '$points_label.text ${app.board.points:08}',
+	app.gg.draw_text(points_label.pos.x, points_label.pos.y, '${points_label.text} ${app.board.points:08}',
 		points_label.cfg)
-	app.gg.draw_text(moves_label.pos.x, moves_label.pos.y, '$moves_label.text ${app.moves:5d}',
+	app.gg.draw_text(moves_label.pos.x, moves_label.pos.y, '${moves_label.text} ${app.moves:5d}',
 		moves_label.cfg)
 	if app.state == .over {
 		app.gg.draw_text(game_over_label.pos.x, game_over_label.pos.y, game_over_label.text,
@@ -381,7 +380,7 @@ fn (mut app App) move(move_fn BoardMoveFN) {
 	}
 }
 
-fn (mut app App) on_key_down(key sapp.KeyCode) {
+fn (mut app App) on_key_down(key gg.KeyCode) {
 	// these keys are independent from the game state:
 	match key {
 		.escape {
@@ -432,8 +431,8 @@ fn (mut app App) on_key_down(key sapp.KeyCode) {
 }
 
 //
-fn on_event(e &sapp.Event, mut app App) {
-	if e.@type == .key_down {
+fn on_event(e &gg.Event, mut app App) {
+	if e.typ == .key_down {
 		app.on_key_down(e.key_code)
 	}
 }
@@ -447,7 +446,6 @@ fn frame(mut app App) {
 
 fn main() {
 	mut app := &App{
-		gg: 0
 		state: .play
 	}
 	app.new_game()
@@ -465,6 +463,6 @@ fn main() {
 	)
 	app.load_tiles()
 	app.victory_image = app.gg.create_image(os.resource_abs_path(os.join_path('assets',
-		'victory.png')))
+		'victory.png')))!
 	app.gg.run()
 }
